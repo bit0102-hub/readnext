@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>도서관정보나루 추천도서 탐색기</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Pretendard / Inter Font -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+            background-color: #f8fafc;
+        }
+        .book-card {
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .book-card:hover {
+            transform: translateY(-4px);
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="text-slate-800 min-h-screen flex flex-col">
+
+    <!-- 상단 헤더 -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-indigo-600 text-white p-2 rounded-xl shadow-md shadow-indigo-100">
+                    <i data-lucide="book-open-check" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">도서관정보나루 추천도서 탐색기</h1>
+                    <p class="text-xs text-slate-500 hidden sm:block">Data4Library Open API (`recommandList`) 웹 단독 실행 도구</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button onclick="loadDemoData()" class="inline-flex items-center px-3 py-1.5 text-xs sm:text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors">
+                    <i data-lucide="sparkles" class="w-4 h-4 mr-1.5"></i>
+                    샘플 결과 보기
+                </button>
+                <button onclick="toggleManualModal(true)" class="inline-flex items-center px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors" title="네트워크 차단 시 직접 XML/JSON 붙여넣기">
+                    <i data-lucide="clipboard-paste" class="w-4 h-4 mr-1.5"></i>
+                    응답 직접 입력
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 메인 컨텐츠 영역 -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- 좌측: API 설정 및 검색 패널 -->
+        <aside class="lg:col-span-4 space-y-6">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-base font-bold text-slate-900 flex items-center">
+                        <i data-lucide="sliders-horizontal" class="w-4 h-4 mr-2 text-indigo-600"></i>
+                        API 요청 설정
+                    </h2>
+                    <span class="text-xs font-medium px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-md border border-emerald-200">GET 방식</span>
+                </div>
+
+                <form id="apiForm" onsubmit="handleSearch(event)" class="space-y-4">
+                    <!-- 인증키 입력 -->
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <label for="authKey" class="block text-xs font-semibold text-slate-700">인증키 (authKey)</label>
+                            <button type="button" onclick="toggleKeyVisibility()" class="text-xs text-slate-400 hover:text-slate-600 flex items-center">
+                                <i id="eyeIcon" data-lucide="eye" class="w-3.5 h-3.5 mr-1"></i>
+                                <span id="eyeText">보이기</span>
+                            </button>
+                        </div>
+                        <div class="relative">
+                            <input type="password" id="authKey" required
+                                value="53da2b0e3dc152831c581022f676e6dca572f019471b6ae11b9982ba80c26240"
+                                placeholder="도서관정보나루 64자리 인증키 입력"
+                                class="w-full px-3.5 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white font-mono text-slate-700 transition">
+                        </div>
+                    </div>
+
+                    <!-- ISBN13 입력 및 프리셋 -->
+                    <div>
+                        <label for="isbn13" class="block text-xs font-semibold text-slate-700 mb-1">기준 도서 ISBN (13자리)</label>
+                        <div class="relative">
+                            <input type="text" id="isbn13" required pattern="[0-9]{13}" maxlength="13"
+                                value="9788998441012"
+                                placeholder="예: 9788998441012 (하이픈 제외)"
+                                oninput="updateUrlPreview()"
+                                class="w-full px-3.5 py-2 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white font-mono text-slate-800 transition">
+                        </div>
+                        <!-- 유명 도서 빠른 선택 칩 -->
+                        <div class="mt-2">
+                            <span class="text-[11px] text-slate-400 block mb-1.5">빠른 도서 선택 (클릭 시 ISBN 자동 입력):</span>
+                            <div class="flex flex-wrap gap-1.5">
+                                <button type="button" onclick="setIsbn('9788998441012', '나미야 잡화점의 기적')" class="text-xs px-2.5 py-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg font-medium transition">
+                                    나미야 잡화점의 기적
+                                </button>
+                                <button type="button" onclick="setIsbn('9788936434267', '아몬드')" class="text-xs px-2.5 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg font-medium transition">
+                                    아몬드
+                                </button>
+                                <button type="button" onclick="setIsbn('9788936434120', '소년이 온다')" class="text-xs px-2.5 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg font-medium transition">
+                                    소년이 온다
+                                </button>
+                                <button type="button" onclick="setIsbn('9791161571188', '불편한 편의점')" class="text-xs px-2.5 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg font-medium transition">
+                                    불편한 편의점
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 추천 타입 선택 -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1.5">추천 유형 (type)</label>
+                        <div class="grid grid-cols-2 gap-2.5">
+                            <label class="cursor-pointer">
+                                <input type="radio" name="recType" value="reader" checked onchange="updateUrlPreview()" class="peer sr-only">
+                                <div class="p-3 rounded-xl border border-slate-200 bg-slate-50 peer-checked:bg-indigo-50 peer-checked:border-indigo-500 peer-checked:text-indigo-900 transition flex flex-col items-center text-center">
+                                    <i data-lucide="users" class="w-5 h-5 mb-1 text-indigo-600"></i>
+                                    <span class="text-xs font-bold">다독자 추천 (reader)</span>
+                                    <span class="text-[10px] text-slate-500 mt-0.5">책을 많이 읽는 이용자 기준</span>
+                                </div>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="recType" value="mania" onchange="updateUrlPreview()" class="peer sr-only">
+                                <div class="p-3 rounded-xl border border-slate-200 bg-slate-50 peer-checked:bg-indigo-50 peer-checked:border-indigo-500 peer-checked:text-indigo-900 transition flex flex-col items-center text-center">
+                                    <i data-lucide="Flame" class="w-5 h-5 mb-1 text-amber-500"></i>
+                                    <span class="text-xs font-bold">마니아 추천 (mania)</span>
+                                    <span class="text-[10px] text-slate-500 mt-0.5">해당 분야 선호 이용자 기준</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 호출 방식 옵션 (CORS 우회 설정) -->
+                    <div class="pt-2 border-t border-slate-100">
+                        <div class="flex items-center justify-between mb-1">
+                            <label for="connectionMode" class="block text-xs font-semibold text-slate-700">연결 방식 (CORS 우회 설정)</label>
+                            <span class="text-[11px] text-slate-400">웹 브라우저 단독 호출용</span>
+                        </div>
+                        <select id="connectionMode" class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-700">
+                            <option value="auto" selected>자동 연결 (직접 연결 시도 후 프록시 우회)</option>
+                            <option value="direct">직접 연결 (HTTPS Direct)</option>
+                            <option value="proxy">프록시 우회 우선 (CORS Proxy)</option>
+                        </select>
+                    </div>
+
+                    <!-- 실행 버튼 -->
+                    <button type="submit" id="submitBtn" class="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold rounded-xl shadow-md shadow-indigo-100 transition flex items-center justify-center space-x-2">
+                        <i data-lucide="search" class="w-4 h-4"></i>
+                        <span>추천 도서 조회하기</span>
+                    </button>
+                </form>
+            </div>
+
+            <!-- 생성된 API URL 미리보기 카드 -->
+            <div class="bg-slate-900 text-slate-100 rounded-2xl shadow-sm p-5 space-y-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold text-indigo-400 flex items-center">
+                        <i data-lucide="link" class="w-3.5 h-3.5 mr-1.5"></i>
+                        생성된 API 요청 URL
+                    </span>
+                    <div class="flex space-x-1.5">
+                        <button onclick="copyGeneratedUrl()" class="text-xs px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition flex items-center">
+                            <i data-lucide="copy" class="w-3 h-3 mr-1"></i> 복사
+                        </button>
+                        <a id="openUrlBtn" href="#" target="_blank" rel="noopener noreferrer" class="text-xs px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition flex items-center">
+                            <i data-lucide="external-link" class="w-3 h-3 mr-1"></i> 새창 열기
+                        </a>
+                    </div>
+                </div>
+                <div id="urlPreviewBox" class="text-xs font-mono bg-slate-950 p-3 rounded-xl break-all text-slate-300 border border-slate-800 leading-relaxed select-all">
+                    <!-- JS에서 동적 업데이트 -->
+                </div>
+                <p class="text-[11px] text-slate-400 leading-normal">
+                    💡 <strong>팁:</strong> 브라우저 보안 정책이나 방화벽으로 조회가 실패할 경우, <strong>[새창 열기]</strong>를 눌러 나온 화면의 텍스트를 복사해 상단의 <strong>[응답 직접 입력]</strong>에 붙여넣으시면 깔끔하게 변환됩니다.
+                </p>
+            </div>
+        </aside>
+
+        <!-- 우측: 결과 출력 패널 -->
+        <section class="lg:col-span-8 flex flex-col space-y-4">
+            
+            <!-- 상태 알림 배너 -->
+            <div id="statusBanner" class="hidden rounded-2xl p-4 border flex items-start space-x-3">
+                <i id="statusIcon" data-lucide="info" class="w-5 h-5 flex-shrink-0 mt-0.5"></i>
+                <div class="flex-grow text-sm">
+                    <h3 id="statusTitle" class="font-bold">알림</h3>
+                    <p id="statusMessage" class="mt-0.5 text-xs sm:text-sm opacity-90"></p>
+                </div>
+            </div>
+
+            <!-- 결과 요약 및 필터 바 -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:px-6 flex flex-wrap items-center justify-between gap-4">
+                <div class="flex items-center space-x-3">
+                    <span id="resultBadge" class="px-3 py-1 bg-indigo-50 text-indigo-700 font-bold text-xs sm:text-sm rounded-full border border-indigo-100">
+                        총 0권
+                    </span>
+                    <div class="text-xs sm:text-sm text-slate-600">
+                        기준 ISBN: <span id="currentIsbnLabel" class="font-mono font-semibold text-slate-900">-</span>
+                        <span id="currentBookNameLabel" class="text-indigo-600 font-medium ml-1"></span>
+                    </div>
+                </div>
+
+                <div class="flex items-center space-x-2 w-full sm:w-auto justify-end">
+                    <!-- 결과 내 검색 -->
+                    <div class="relative flex-grow sm:flex-grow-0 sm:w-48">
+                        <i data-lucide="filter" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+                        <input type="text" id="filterInput" oninput="filterDisplayedBooks()" placeholder="결과 내 제목/저자 검색..."
+                            class="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+
+                    <!-- 뷰 전환 탭 (카드뷰 / 표 뷰 / 원본 데이터) -->
+                    <div class="inline-flex rounded-lg bg-slate-100 p-1">
+                        <button onclick="switchView('grid')" id="tabGrid" class="px-2.5 py-1 text-xs font-semibold rounded-md bg-white text-slate-800 shadow-sm transition flex items-center">
+                            <i data-lucide="layout-grid" class="w-3.5 h-3.5 mr-1"></i> 카드
+                        </button>
+                        <button onclick="switchView('table')" id="tabTable" class="px-2.5 py-1 text-xs font-semibold rounded-md text-slate-600 hover:text-slate-900 transition flex items-center">
+                            <i data-lucide="table" class="w-3.5 h-3.5 mr-1"></i> 표
+                        </button>
+                        <button onclick="switchView('raw')" id="tabRaw" class="px-2.5 py-1 text-xs font-semibold rounded-md text-slate-600 hover:text-slate-900 transition flex items-center">
+                            <i data-lucide="code" class="w-3.5 h-3.5 mr-1"></i> 원본
+                        </button>
+                    </div>
+
+                    <!-- CSV 다운로드 버튼 -->
+                    <button onclick="downloadCSV()" id="csvBtn" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition flex items-center shadow-sm">
+                        <i data-lucide="download" class="w-3.5 h-3.5 mr-1"></i> CSV
+                    </button>
+                </div>
+            </div>
+
+            <!-- 로딩 스피너 -->
+            <div id="loadingIndicator" class="hidden bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3">
+                <div class="inline-block animate-spin rounded-full h-10 w-10 border-4 border-indigo-600 border-t-transparent"></div>
+                <p class="text-sm font-semibold text-slate-700">도서관정보나루 서버에서 추천 도서 목록을 불러오는 중입니다...</p>
+                <p id="loadingSubText" class="text-xs text-slate-400">네트워크 상태에 따라 수 초가 소요될 수 있습니다.</p>
+            </div>
+
+            <!-- 1. 그리드(카드) 뷰 영역 -->
+            <div id="gridView" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                <!-- 도서 카드들이 동적으로 렌더링됨 -->
+            </div>
+
+            <!-- 2. 테이블(표) 뷰 영역 -->
+            <div id="tableView" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600">
+                                <th class="py-3 px-4 w-12 text-center">순번</th>
+                                <th class="py-3 px-4">도서명</th>
+                                <th class="py-3 px-4">저자</th>
+                                <th class="py-3 px-4">출판사</th>
+                                <th class="py-3 px-4 text-center">출판연도</th>
+                                <th class="py-3 px-4 text-center">ISBN13</th>
+                                <th class="py-3 px-4 text-center">연계탐색</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody" class="divide-y divide-slate-200 text-xs sm:text-sm">
+                            <!-- 표 행이 동적으로 렌더링됨 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 3. 원본 데이터(JSON/XML) 뷰 영역 -->
+            <div id="rawView" class="hidden bg-slate-900 text-slate-100 rounded-2xl shadow-sm p-5">
+                <div class="flex justify-between items-center mb-3">
+                    <span class="text-xs font-mono text-indigo-400">API Raw Response Data</span>
+                    <button onclick="copyRawData()" class="text-xs px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 flex items-center">
+                        <i data-lucide="copy" class="w-3.5 h-3.5 mr-1"></i> 데이터 복사
+                    </button>
+                </div>
+                <pre id="rawContent" class="text-xs font-mono bg-slate-950 p-4 rounded-xl overflow-x-auto max-h-[600px] text-emerald-300 leading-relaxed"></pre>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- 수동 응답 붙여넣기 모달 -->
+    <div id="manualModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-xl border border-slate-200 space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 class="text-base font-bold text-slate-900 flex items-center">
+                    <i data-lucide="file-code" class="w-5 h-5 mr-2 text-indigo-600"></i>
+                    API 응답 데이터(XML 또는 JSON) 직접 붙여넣기
+                </h3>
+                <button onclick="toggleManualModal(false)" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <p class="text-xs text-slate-600 leading-relaxed">
+                브라우저에서 API URL을 직접 열어 확인한 <strong>XML</strong> 또는 <strong>JSON</strong> 텍스트 전체를 아래 상자에 붙여넣고 변환하기를 누르면, 즉시 카드 및 표 형태로 분석해 보여줍니다.
+            </p>
+            <textarea id="manualInput" rows="10" placeholder="<response>... 또는 { &quot;response&quot;: ... } 형태의 데이터를 이곳에 붙여넣으세요."
+                class="w-full p-3 text-xs font-mono bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+            <div class="flex justify-end space-x-2 pt-2">
+                <button onclick="toggleManualModal(false)" class="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition">
+                    취소
+                </button>
+                <button onclick="parseManualInput()" class="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition flex items-center">
+                    <i data-lucide="check" class="w-4 h-4 mr-1"></i> 데이터 분석 및 화면 표시
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 하단 토스트 메시지 -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white px-4 py-2.5 rounded-xl shadow-lg text-xs font-medium transform translate-y-20 opacity-0 transition-all duration-300 z-50 flex items-center space-x-2">
+        <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i>
+        <span id="toastMsg">복사되었습니다.</span>
+    </div>
+
+    <!-- 푸터 -->
+    <footer class="bg-white border-t border-slate-200 mt-12 py-5">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-400 gap-2">
+            <p>데이터 출처: 국립중앙도서관 도서관정보나루 (Data4Library Open API)</p>
+            <p>본 도구는 서버에 인증키나 데이터를 저장하지 않는 100% 브라우저 단독 실행 프로그램입니다.</p>
+        </div>
+    </footer>
+
+    <script>
+        // 전역 상태 관리
+        let allBooks = [];
+        let filteredBooks = [];
+        let currentView = 'grid';
+        let currentRawText = '';
+        let selectedBookLabel = '나미야 잡화점의 기적';
+
+        // 9788998441012 (나미야 잡화점의 기적) 실제 추천 도서 기반 샘플 데이터
+        const DEMO_BOOKS = [
+            {
+                no: 1,
+                bookname: "가면산장 살인사건",
+                authors: "히가시노 게이고 지음 ;김난주 옮김",
+                publisher: "재인",
+                publication_year: "2014",
+                isbn13: "9788990982575",
+                addition_symbol: "03830",
+                class_no: "833.6",
+                bookImageURL: "https://image.aladin.co.kr/product/4518/92/cover/899098257x_1.jpg"
+            },
+            {
+                no: 2,
+                bookname: "용의자 X의 헌신",
+                authors: "히가시노 게이고 지음 ;양억관 옮김",
+                publisher: "현대문학",
+                publication_year: "2006",
+                isbn13: "9788972753650",
+                addition_symbol: "03830",
+                class_no: "833.6",
+                bookImageURL: "https://image.aladin.co.kr/product/67/57/cover/8972753656_1.jpg"
+            },
+            {
+                no: 3,
+                bookname: "라플라스의 마녀 :히가시노 게이고 장편소설",
+                authors: "히가시노 게이고 지음 ;양윤옥 옮김",
+                publisher: "현대문학",
+                publication_year: "2016",
+                isbn13: "9788972757573",
+                addition_symbol: "03830",
+                class_no: "833.6",
+                bookImageURL: "https://image.aladin.co.kr/product/7492/14/cover/8972757570_1.jpg"
+            },
+            {
+                no: 4,
+                bookname: "악의 :히가시노 게이고 장편소설",
+                authors: "히가시노 게이고 지음 ;양억관 옮김",
+                publisher: "현대문학",
+                publication_year: "2008",
+                isbn13: "9788972754190",
+                addition_symbol: "03830",
+                class_no: "833.6",
+                bookImageURL: "https://image.aladin.co.kr/product/276/31/cover/8972754199_1.jpg"
+            },
+            {
+                no: 5,
+                bookname: "고백 :미나토 가나에 장편소설",
+                authors: "미나토 가나에 지음 ;김선영 옮김",
+                publisher: "비채",
+                publication_year: "2010",
+                isbn13: "9788992036276",
+                addition_symbol: "03830",
+                class_no: "833.6",
+                bookImageURL: "https://image.aladin.co.kr/product/682/9/cover/8992036272_1.jpg"
+            },
+            {
+                no: 6,
+                bookname: "7년의 밤 :정유정 장편소설",
+                authors: "지은이: 정유정",
+                publisher: "은행나무",
+                publication_year: "2011",
+                isbn13: "9788956604992",
+                addition_symbol: "03810",
+                class_no: "813.7",
+                bookImageURL: "https://image.aladin.co.kr/product/1046/38/cover/8956604991_1.jpg"
+            },
+            {
+                no: 7,
+                bookname: "창문 넘어 도망친 100세 노인 :요나스 요나손 장편소설",
+                authors: "요나스 요나손 지음 ;임호경 옮김",
+                publisher: "열린책들",
+                publication_year: "2013",
+                isbn13: "9788932916194",
+                addition_symbol: "03850",
+                class_no: "859.7",
+                bookImageURL: "https://image.aladin.co.kr/product/2915/26/cover/8932916195_1.jpg"
+            },
+            {
+                no: 8,
+                bookname: "연애의 행방 :히가시노 게이고 장편소설",
+                authors: "히가시노 게이고 지음 ;양윤옥 옮김",
+                publisher: "소미미디어",
+                publication_year: "2016",
+                isbn13: "9791159872365",
+                addition_symbol: "03830",
+                class_no: "833.6",
+                bookImageURL: "https://image.aladin.co.kr/product/9130/41/cover/k702535590_1.jpg"
+            },
+            {
+                no: 9,
+                bookname: "기린의 날개 :히가시노 게이고 장편소설",
+                authors: "히가시노 게이고 지음 ;김난주 옮김",
+                publisher: "재인",
+                publication_year: "2012",
+                isbn13: "9788990982476",
+                addition_symbol: "03830",
+                class_no: "833.6",
+                bookImageURL: "https://image.aladin.co.kr/product/1968/69/cover/8990982472_1.jpg"
+            }
+        ];
+
+        // 초기화
+        window.onload = function() {
+            lucide.createIcons();
+            updateUrlPreview();
+            // 첫 화면 진입 시 바로 활용할 수 있도록 먼저 실제 API 호출을 시도하고, 실패 시 샘플 데이터를 안내와 함께 표시
+            fetchBooksFromApi(true);
+        };
+
+        // 인증키 보이기/가리기 토글
+        function toggleKeyVisibility() {
+            const input = document.getElementById('authKey');
+            const eyeText = document.getElementById('eyeText');
+            if (input.type === 'text') {
+                input.type = 'password';
+                eyeText.textContent = '보이기';
+            } else {
+                input.type = 'text';
+                eyeText.textContent = '가리기';
+            }
+            updateUrlPreview();
+        }
+
+        // 빠른 도서 선택 버튼 클릭 시
+        function setIsbn(isbn, title) {
+            document.getElementById('isbn13').value = isbn;
+            selectedBookLabel = title;
+            updateUrlPreview();
+            fetchBooksFromApi(false);
+        }
+
+        // 현재 입력값으로 API URL 생성 및 미리보기 갱신
+        function getGeneratedUrl(format = 'json') {
+            const authKey = document.getElementById('authKey').value.trim();
+            const isbn13 = document.getElementById('isbn13').value.trim();
+            const recType = document.querySelector('input[name="recType"]:checked').value;
+            return `https://data4library.kr/api/recommandList?authKey=${encodeURIComponent(authKey)}&isbn13=${encodeURIComponent(isbn13)}&type=${encodeURIComponent(recType)}&format=${format}`;
+        }
+
+        function updateUrlPreview() {
+            const url = getGeneratedUrl('json');
+            document.getElementById('urlPreviewBox').textContent = url;
+            document.getElementById('openUrlBtn').href = url;
+        }
+
+        // 검색 폼 제출 핸들러
+        function handleSearch(e) {
+            e.preventDefault();
+            const isbnInput = document.getElementById('isbn13').value.trim();
+            if (isbnInput !== '9788998441012' && isbnInput !== '9788936434267' && isbnInput !== '9788936434120' && isbnInput !== '9791161571188') {
+                selectedBookLabel = '';
+            }
+            updateUrlPreview();
+            fetchBooksFromApi(false);
+        }
+
+        // API 호출 핵심 로직 (직접 호출 + 다중 CORS 프록시 폴백 지원)
+        async function fetchBooksFromApi(isInitialLoad = false) {
+            const targetUrl = getGeneratedUrl('json');
+            const mode = document.getElementById('connectionMode').value;
+            const isbn13 = document.getElementById('isbn13').value.trim();
+
+            showLoading(true);
+            hideBanner();
+
+            // 시도할 엔드포인트 목록 구성
+            let endpoints = [];
+            if (mode === 'direct') {
+                endpoints = [{ name: '직접 연결(HTTPS)', url: targetUrl }];
+            } else if (mode === 'proxy') {
+                endpoints = [
+                    { name: 'CORS 프록시 1 (AllOrigins)', url: `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}` },
+                    { name: 'CORS 프록시 2 (CodeTabs)', url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}` },
+                    { name: '직접 연결(HTTPS)', url: targetUrl }
+                ];
+            } else {
+                endpoints = [
+                    { name: '직접 연결(HTTPS)', url: targetUrl },
+                    { name: 'CORS 프록시 1 (AllOrigins)', url: `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}` },
+                    { name: 'CORS 프록시 2 (CodeTabs)', url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}` }
+                ];
+            }
+
+            let lastError = null;
+
+            for (const ep of endpoints) {
+                try {
+                    document.getElementById('loadingSubText').textContent = `${ep.name} 방식으로 데이터 수신 시도 중...`;
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 7000);
+
+                    const response = await fetch(ep.url, { signal: controller.signal });
+                    clearTimeout(timeoutId);
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP 상태 코드 오류 (${response.status})`);
+                    }
+
+                    const rawText = await response.text();
+                    const parsedResult = parseApiPayload(rawText);
+
+                    if (parsedResult.error) {
+                        // 도서관정보나루 API 자체 에러 메시지 (예: 미등록 인증키, 한도 초과 등)
+                        showLoading(false);
+                        currentRawText = rawText;
+                        document.getElementById('rawContent').textContent = rawText;
+                        showBanner('warning', `도서관정보나루 API 응답 알림 (${ep.name})`, `${parsedResult.error} (키가 비활성 상태이거나 승인 대기 중일 수 있습니다. 아래는 예시를 위한 샘플 데이터입니다.)`);
+                        renderBookList(DEMO_BOOKS, isbn13, true);
+                        return;
+                    }
+
+                    // 정상 수신 완료
+                    showLoading(false);
+                    currentRawText = rawText;
+                    document.getElementById('rawContent').textContent = formatRawString(rawText);
+                    showBanner('success', '실시간 API 조회 완료', `${ep.name}을 통해 총 ${parsedResult.books.length}권의 추천 도서를 성공적으로 불러왔습니다.`);
+                    renderBookList(parsedResult.books, isbn13, false);
+                    return;
+
+                } catch (err) {
+                    lastError = err;
+                }
+            }
+
+            // 모든 연결 실패 시 샘플 데이터로 폴백
+            showLoading(false);
+            loadDemoData(true, lastError ? lastError.message : '네트워크 또는 CORS 차단');
+        }
+
+        // JSON 또는 XML 응답 텍스트를 파싱하여 도서 배열 추출
+        function parseApiPayload(text) {
+            const trimmed = text.trim();
+
+            // 1. JSON 파싱 시도
+            if (trimmed.startsWith('{')) {
+                try {
+                    const data = JSON.parse(trimmed);
+                    const res = data.response || data;
+
+                    if (res.error) {
+                        return { error: res.error, books: [] };
+                    }
+
+                    const docs = res.docs || [];
+                    const books = [];
+
+                    docs.forEach((item, idx) => {
+                        const b = item.book || item;
+                        if (b && b.bookname) {
+                            books.push({
+                                no: b.no || (idx + 1),
+                                bookname: b.bookname || '-',
+                                authors: b.authors || '-',
+                                publisher: b.publisher || '-',
+                                publication_year: b.publication_year || '-',
+                                isbn13: b.isbn13 || '-',
+                                addition_symbol: b.addition_symbol || '',
+                                class_no: b.class_no || '',
+                                bookImageURL: b.bookImageURL || ''
+                            });
+                        }
+                    });
+
+                    return { error: null, books };
+                } catch (e) {
+                    // JSON 파싱 실패 시 아래 XML 파서로 이동
+                }
+            }
+
+            // 2. XML 파싱 시도
+            if (trimmed.startsWith('<')) {
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(trimmed, "text/xml");
+
+                const errorNode = xmlDoc.querySelector("error");
+                if (errorNode && errorNode.textContent) {
+                    return { error: errorNode.textContent.trim(), books: [] };
+                }
+
+                const bookNodes = xmlDoc.querySelectorAll("book");
+                const books = [];
+
+                bookNodes.forEach((node, idx) => {
+                    const getVal = (tag) => {
+                        const el = node.querySelector(tag);
+                        return el ? el.textContent.trim() : '';
+                    };
+                    books.push({
+                        no: getVal('no') || (idx + 1),
+                        bookname: getVal('bookname') || '-',
+                        authors: getVal('authors') || '-',
+                        publisher: getVal('publisher') || '-',
+                        publication_year: getVal('publication_year') || '-',
+                        isbn13: getVal('isbn13') || '-',
+                        addition_symbol: getVal('addition_symbol'),
+                        class_no: getVal('class_no'),
+                        bookImageURL: getVal('bookImageURL')
+                    });
+                });
+
+                return { error: null, books };
+            }
+
+            return { error: '인식할 수 없는 응답 형식입니다.', books: [] };
+        }
+
+        // 샘플 데이터 로드 함수
+        function loadDemoData(isFallback = false, reason = '') {
+            const sampleJson = JSON.stringify({
+                response: {
+                    request: {
+                        isbn13: "9788998441012",
+                        type: document.querySelector('input[name="recType"]:checked').value
+                    },
+                    resultNum: DEMO_BOOKS.length,
+                    docs: DEMO_BOOKS.map(b => ({ book: b }))
+                }
+            }, null, 2);
+
+            currentRawText = sampleJson;
+            document.getElementById('rawContent').textContent = sampleJson;
+            document.getElementById('isbn13').value = '9788998441012';
+            selectedBookLabel = '나미야 잡화점의 기적';
+            updateUrlPreview();
+
+            if (isFallback) {
+                showBanner('info', '샘플 데이터 미리보기 모드', `실시간 서버 연결이 제한되어(${reason}), 기준 도서 [9788998441012 - 나미야 잡화점의 기적]의 추천 도서 샘플 데이터를 표시합니다. 좌측의 [새창 열기] 후 [응답 직접 입력] 기능을 사용하실 수도 있습니다.`);
+            } else {
+                showBanner('info', '샘플 데이터 로드됨', `기준 도서 [9788998441012 - 나미야 잡화점의 기적]에 대한 다독자 추천 도서 샘플 목록입니다.`);
+            }
+
+            renderBookList(DEMO_BOOKS, '9788998441012', true);
+        }
+
+        // 도서 목록을 화면에 렌더링
+        function renderBookList(books, isbn13, isDemo = false) {
+            allBooks = books;
+            filteredBooks = [...allBooks];
+
+            document.getElementById('currentIsbnLabel').textContent = isbn13;
+            document.getElementById('currentBookNameLabel').textContent = selectedBookLabel ? `(${selectedBookLabel})` : '';
+            document.getElementById('filterInput').value = '';
+
+            updateViews();
+        }
+
+        // 검색어 필터링
+        function filterDisplayedBooks() {
+            const keyword = document.getElementById('filterInput').value.trim().toLowerCase();
+            if (!keyword) {
+                filteredBooks = [...allBooks];
+            } else {
+                filteredBooks = allBooks.filter(b =>
+                    (b.bookname && b.bookname.toLowerCase().includes(keyword)) ||
+                    (b.authors && b.authors.toLowerCase().includes(keyword)) ||
+                    (b.publisher && b.publisher.toLowerCase().includes(keyword))
+                );
+            }
+            updateViews();
+        }
+
+        // 카드 뷰 및 테이블 뷰 동시 업데이트
+        function updateViews() {
+            const countBadge = document.getElementById('resultBadge');
+            countBadge.textContent = `총 ${filteredBooks.length}권`;
+
+            const gridContainer = document.getElementById('gridView');
+            const tableBody = document.getElementById('tableBody');
+
+            gridContainer.innerHTML = '';
+            tableBody.innerHTML = '';
+
+            if (filteredBooks.length === 0) {
+                gridContainer.innerHTML = `
+                    <div class="col-span-full bg-white rounded-2xl border border-slate-200 p-12 text-center">
+                        <p class="text-slate-500 font-medium text-sm">표시할 추천 도서 데이터가 없습니다.</p>
+                        <p class="text-slate-400 text-xs mt-1">다른 ISBN으로 검색하거나 상단의 [샘플 결과 보기]를 눌러보세요.</p>
+                    </div>
+                `;
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="py-8 text-center text-slate-400">데이터가 없습니다.</td>
+                    </tr>
+                `;
+                return;
+            }
+
+            filteredBooks.forEach((book, index) => {
+                const safeTitle = escapeHtml(book.bookname);
+                const safeAuthor = escapeHtml(book.authors);
+                const safePublisher = escapeHtml(book.publisher);
+                const safeIsbn = escapeHtml(book.isbn13);
+                const placeholderImg = `https://placehold.co/160x230/e2e8f0/475569?text=${encodeURIComponent(book.bookname.slice(0, 8))}`;
+                const coverUrl = book.bookImageURL ? book.bookImageURL.replace(/^http:\/\//i, 'https://') : placeholderImg;
+
+                // 1. 카드 생성
+                const card = document.createElement('div');
+                card.className = 'book-card bg-white rounded-2xl border border-slate-200 p-4 shadow-sm hover:shadow-md flex flex-col justify-between';
+                card.innerHTML = `
+                    <div class="flex space-x-4">
+                        <!-- 표지 이미지 -->
+                        <div class="w-20 sm:w-24 flex-shrink-0">
+                            <div class="aspect-[2/3] rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shadow-sm relative">
+                                <img src="${coverUrl}" alt="${safeTitle}"
+                                    onerror="this.onerror=null; this.src='${placeholderImg}';"
+                                    class="w-full h-full object-cover">
+                                <span class="absolute top-1.5 left-1.5 bg-slate-900/80 backdrop-blur-sm text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md">
+                                    #${index + 1}
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- 도서 메타 정보 -->
+                        <div class="flex-grow min-w-0 flex flex-col justify-between">
+                            <div>
+                                <div class="flex items-center gap-1.5 mb-1">
+                                    ${book.class_no ? `<span class="text-[10px] font-semibold px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-md">KDC ${escapeHtml(book.class_no)}</span>` : ''}
+                                    <span class="text-[10px] font-medium px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md">${escapeHtml(book.publication_year)}년</span>
+                                </div>
+                                <h3 class="text-sm font-bold text-slate-900 line-clamp-2 leading-snug" title="${safeTitle}">
+                                    ${safeTitle}
+                                </h3>
+                                <p class="text-xs text-slate-600 mt-1 line-clamp-1" title="${safeAuthor}">${safeAuthor}</p>
+                                <p class="text-xs text-slate-400 mt-0.5">${safePublisher}</p>
+                            </div>
+
+                            <div class="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
+                                <span class="text-[11px] font-mono text-slate-500">${safeIsbn}</span>
+                                <button onclick="copyText('${safeIsbn}', 'ISBN(${safeIsbn})이 복사되었습니다.')" class="text-[11px] text-slate-400 hover:text-indigo-600 transition" title="ISBN 복사">
+                                    복사
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 하단 액션 버튼: 이 책으로 다시 추천 도서 연쇄 탐색 -->
+                    <div class="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
+                        <button onclick="setIsbn('${safeIsbn}', '${safeTitle.replace(/'/g, "\\'")}')"
+                            class="flex-grow py-1.5 px-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-lg transition flex items-center justify-center">
+                            <span>이 책의 추천도서 이어서 보기</span>
+                        </button>
+                        <a href="https://search.shopping.naver.com/book/search?query=${encodeURIComponent(book.isbn13)}" target="_blank" rel="noopener noreferrer"
+                            class="py-1.5 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-lg transition" title="네이버 도서 정보 검색">
+                            상세
+                        </a>
+                    </div>
+                `;
+                gridContainer.appendChild(card);
+
+                // 2. 테이블 행 생성
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50 transition';
+                tr.innerHTML = `
+                    <td class="py-3 px-4 text-center font-semibold text-slate-500">${index + 1}</td>
+                    <td class="py-3 px-4 font-bold text-slate-900">${safeTitle}</td>
+                    <td class="py-3 px-4 text-slate-600">${safeAuthor}</td>
+                    <td class="py-3 px-4 text-slate-600">${safePublisher}</td>
+                    <td class="py-3 px-4 text-center text-slate-500">${escapeHtml(book.publication_year)}</td>
+                    <td class="py-3 px-4 text-center font-mono text-xs text-slate-600">${safeIsbn}</td>
+                    <td class="py-3 px-4 text-center">
+                        <button onclick="setIsbn('${safeIsbn}', '${safeTitle.replace(/'/g, "\\'")}')"
+                            class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-md transition">
+                            기준 설정
+                        </button>
+                    </td>
+                `;
+                tableBody.appendChild(tr);
+            });
+        }
+
+        // 뷰 전환 (카드 / 테이블 / 원본)
+        function switchView(view) {
+            currentView = view;
+            const grid = document.getElementById('gridView');
+            const table = document.getElementById('tableView');
+            const raw = document.getElementById('rawView');
+
+            const tabGrid = document.getElementById('tabGrid');
+            const tabTable = document.getElementById('tabTable');
+            const tabRaw = document.getElementById('tabRaw');
+
+            // 모두 숨김 초기화
+            grid.classList.add('hidden');
+            table.classList.add('hidden');
+            raw.classList.add('hidden');
+
+            [tabGrid, tabTable, tabRaw].forEach(btn => {
+                btn.className = 'px-2.5 py-1 text-xs font-semibold rounded-md text-slate-600 hover:text-slate-900 transition flex items-center';
+            });
+
+            const activeClass = 'px-2.5 py-1 text-xs font-semibold rounded-md bg-white text-slate-800 shadow-sm transition flex items-center';
+
+            if (view === 'grid') {
+                grid.classList.remove('hidden');
+                tabGrid.className = activeClass;
+            } else if (view === 'table') {
+                table.classList.remove('hidden');
+                tabTable.className = activeClass;
+            } else if (view === 'raw') {
+                raw.classList.remove('hidden');
+                tabRaw.className = activeClass;
+            }
+        }
+
+        // 수동 입력 모달 열기/닫기
+        function toggleManualModal(show) {
+            const modal = document.getElementById('manualModal');
+            if (show) {
+                modal.classList.remove('hidden');
+                document.getElementById('manualInput').focus();
+            } else {
+                modal.classList.add('hidden');
+            }
+        }
+
+        // 수동으로 붙여넣은 XML/JSON 파싱
+        function parseManualInput() {
+            const rawText = document.getElementById('manualInput').value.trim();
+            if (!rawText) {
+                showToast('붙여넣은 데이터가 없습니다.');
+                return;
+            }
+
+            const result = parseApiPayload(rawText);
+            if (result.error) {
+                showBanner('warning', '데이터 내 오류 메시지 감지', result.error);
+                toggleManualModal(false);
+                return;
+            }
+
+            if (result.books.length === 0) {
+                showBanner('warning', '도서 목록을 찾을 수 없음', '입력하신 XML 또는 JSON 데이터 내부에 <book> 항목이나 docs 배열이 존재하지 않습니다.');
+                toggleManualModal(false);
+                return;
+            }
+
+            currentRawText = rawText;
+            document.getElementById('rawContent').textContent = formatRawString(rawText);
+            toggleManualModal(false);
+            showBanner('success', '수동 데이터 분석 성공', `붙여넣으신 응답 데이터에서 총 ${result.books.length}권의 추천 도서를 추출했습니다.`);
+            renderBookList(result.books, document.getElementById('isbn13').value, false);
+        }
+
+        // CSV 다운로드 기능
+        function downloadCSV() {
+            if (filteredBooks.length === 0) {
+                showToast('다운로드할 도서 데이터가 없습니다.');
+                return;
+            }
+
+            const headers = ['순번', '도서명', '저자', '출판사', '출판연도', 'ISBN13', '분류기호'];
+            const rows = filteredBooks.map((b, idx) => [
+                idx + 1,
+                `"${(b.bookname || '').replace(/"/g, '""')}"`,
+                `"${(b.authors || '').replace(/"/g, '""')}"`,
+                `"${(b.publisher || '').replace(/"/g, '""')}"`,
+                `"${(b.publication_year || '')}"`,
+                `"${(b.isbn13 || '')}"`,
+                `"${(b.class_no || '')}"`
+            ]);
+
+            const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `추천도서목록_${document.getElementById('isbn13').value}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast('CSV 파일 다운로드가 시작되었습니다.');
+        }
+
+        // 유틸리티 함수들
+        function showLoading(isLoading) {
+            const loader = document.getElementById('loadingIndicator');
+            const grid = document.getElementById('gridView');
+            if (isLoading) {
+                loader.classList.remove('hidden');
+                grid.classList.add('hidden');
+            } else {
+                loader.classList.add('hidden');
+                if (currentView === 'grid') grid.classList.remove('hidden');
+            }
+        }
+
+        function showBanner(type, title, message) {
+            const banner = document.getElementById('statusBanner');
+            const titleEl = document.getElementById('statusTitle');
+            const msgEl = document.getElementById('statusMessage');
+
+            banner.classList.remove('hidden', 'bg-emerald-50', 'border-emerald-200', 'text-emerald-900', 'bg-amber-50', 'border-amber-200', 'text-amber-900', 'bg-indigo-50', 'border-indigo-200', 'text-indigo-900');
+
+            if (type === 'success') {
+                banner.classList.add('bg-emerald-50', 'border-emerald-200', 'text-emerald-900');
+            } else if (type === 'warning') {
+                banner.classList.add('bg-amber-50', 'border-amber-200', 'text-amber-900');
+            } else {
+                banner.classList.add('bg-indigo-50', 'border-indigo-200', 'text-indigo-900');
+            }
+
+            titleEl.textContent = title;
+            msgEl.textContent = message;
+        }
+
+        function hideBanner() {
+            document.getElementById('statusBanner').classList.add('hidden');
+        }
+
+        function copyGeneratedUrl() {
+            copyText(getGeneratedUrl('json'), 'API 요청 URL이 클립보드에 복사되었습니다.');
+        }
+
+        function copyRawData() {
+            copyText(currentRawText, '원본 응답 데이터가 복사되었습니다.');
+        }
+
+        function copyText(text, msg) {
+            const tempInput = document.createElement('textarea');
+            tempInput.value = text;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+            showToast(msg);
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMsg').textContent = msg;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 2500);
+        }
+
+        function formatRawString(str) {
+            try {
+                return JSON.stringify(JSON.parse(str), null, 2);
+            } catch (e) {
+                return str;
+            }
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+    </script>
+</body>
+</html>
